@@ -4,7 +4,7 @@
 
 ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?logo=javascript&logoColor=black) ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white) ![Supabase](https://img.shields.io/badge/Supabase-3FCF8E?logo=supabase&logoColor=white) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)
 
-[Project portfolio](PORTFOLIO.md) · [Architecture](docs/ARCHITECTURE.md) · [Database notes](docs/DATABASE.md)
+[Project website](https://batamtes.vercel.app/) · [Architecture](docs/ARCHITECTURE.md) · [Source code](supabase/functions/chat/index.ts) · [Verification workflow](https://github.com/fahmifaldi61-tech/wisatabatam/actions/workflows/verify.yml)
 
 ## Overview
 
@@ -12,7 +12,7 @@ Travel information is often fragmented across destination listings, operators an
 
 The frontend uses native HTML, CSS and JavaScript. The server-side implementation retrieves verified tourism documents through Supabase PostgreSQL REST/RPC, validates generated answers against source evidence and can fall back to checked data when an AI request fails.
 
-> Backend source is a snapshot from the integration branch, documented as Supabase Function v31 on November 11, 2026. This repository does not establish that this is the current live deployment. Database schema migrations are not yet included.
+> **Implementation verified on November 24, 2026:** the tracked TypeScript backend matches the active Supabase Edge Function `chat` v31 byte-for-byte. The Deno configuration matches semantically and the JWT setting matches. Database schema migrations are not yet included; the live database contents were not reverified on this date.
 
 ## Architecture
 
@@ -36,6 +36,16 @@ flowchart LR
 - Browser security headers, script integrity checks, Markdown sanitization and an explicit asset publication allowlist.
 
 The retrieval code uses verified document queries and ranking. The historical database audit reported pgvector installed but no populated embeddings; active semantic vector search is not claimed.
+
+## Engineering decisions
+
+| Decision | Why it matters |
+| --- | --- |
+| Verified-document retrieval before generation | Limits unsupported travel claims and preserves source provenance. |
+| Server-side AI and database access | Keeps provider credentials out of the browser. |
+| Opaque session tokens and request budgets | Controls access and abuse without exposing database credentials. |
+| Explicit asset manifest and CSP hashes | Keeps the published surface narrow and detects script/configuration drift. |
+| Independent frontend and backend releases | Allows static website maintenance without redeploying the Edge Function. |
 
 ## Technology stack
 
@@ -116,17 +126,19 @@ If inline JavaScript changes, review and update CSP with `node wisata_batam_proj
 
 ## Product showcase
 
-[INSERT SCREENSHOT / DEMO GIF HERE: homepage and destination catalog]
+[Explore the project website](https://batamtes.vercel.app/) to see the interface and destination catalog. Hosted chat and voice features depend on service availability.
 
-[INSERT SCREENSHOT / DEMO GIF HERE: bilingual chat response with linked sources and destination photos]
+<!-- [INSERT SCREENSHOT / DEMO GIF HERE: homepage and destination catalog] -->
+<!-- [INSERT SCREENSHOT / DEMO GIF HERE: bilingual chat response with linked sources and destination photos] -->
+<!-- [INSERT SCREENSHOT / DEMO GIF HERE: voice transcription interface and itinerary response] -->
 
-[INSERT SCREENSHOT / DEMO GIF HERE: voice transcription interface and itinerary response]
+Screenshot capture and release verification instructions: [release checklist](docs/RELEASE_CHECKLIST.md) and [portfolio showcase guide](docs/PORTFOLIO_SHOWCASE.md).
 
 ## Documentation and credits
 
 - [Architecture](docs/ARCHITECTURE.md) and [code guide](docs/CODE_GUIDE.md)
 - [Database contract and limitations](docs/DATABASE.md)
-- [Historical integration audit](docs/INTEGRATION_AUDIT.md)
+- [Historical integration audit](docs/INTEGRATION_AUDIT.md) and [release checklist](docs/RELEASE_CHECKLIST.md)
 - [Photo source references](wisata_batam_project/destination-photo-sources.json) and [remote photo references](wisata_batam_project/remote-destination-photo-sources.json)
 - [Earlier Django/Chroma RAG prototype](https://github.com/fahmifaldi61-tech/wisatabatam-backend.) — not part of the current frontend request path.
 
