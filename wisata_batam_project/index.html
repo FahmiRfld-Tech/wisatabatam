@@ -329,6 +329,23 @@ p{font-size:14px;line-height:1.75}
 }
 .composer{flex-shrink:0;background:var(--bg);padding:10px 24px 12px}
 .composer-inner{max-width:732px;margin:auto}
+.rag-filters{display:flex;gap:8px;overflow-x:auto;margin:0 0 8px;padding:2px 2px 5px;scrollbar-width:thin}
+.rag-filter-group{display:flex;gap:5px;flex:none}
+.rag-filter-group+.rag-filter-group{border-left:1px solid #d5e5dd;padding-left:8px}
+.rag-chip{border:1px solid #c6ded1;background:#f4fbf7;color:#205441;border-radius:999px;padding:6px 10px;font:inherit;font-size:.75rem;cursor:pointer;line-height:1.35}
+.rag-filters .rag-chip{white-space:nowrap}
+.rag-chip[aria-pressed="true"]{background:#e2f4ea;color:#0b5e40;border-color:#5f9f81;font-weight:700}
+.rag-chip:focus-visible,.rag-drawer a:focus-visible{outline:2px solid #268362;outline-offset:2px}
+.rag-speed{display:inline-block;margin:8px 0 0;color:#285d47;font-size:.73rem;font-weight:700}
+.rag-gap{border-left:3px solid #b47716;background:#fff6e1;color:#653f09;border-radius:6px;padding:8px 11px;margin-top:10px;font-size:.82rem}
+.rag-gap p{margin:4px 0 0}
+.rag-evidence,.rag-followups{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;align-items:start}
+.rag-evidence>small{flex-basis:100%;color:#3d6555}
+.rag-drawer[open]{flex-basis:100%;border:1px solid #d5e5dd;padding:8px;border-radius:10px}
+.rag-drawer .rag-chip{width:fit-content;overflow-wrap:anywhere}
+.rag-snippet{margin:8px 0;padding:7px 9px;border-left:2px solid #72b197;color:#174033;white-space:pre-wrap;overflow-wrap:anywhere;font-size:.82rem}
+.rag-match{display:block;margin:4px 0 7px;color:#3d6555}
+.rag-followups .rag-chip{text-align:left}
 .input-wrap{
   display:flex;align-items:flex-end;gap:8px;border:1px solid var(--line);
   padding:8px;border-radius:20px;background:white;
@@ -768,6 +785,7 @@ legend{font-size:14px;font-weight:700;margin-bottom:8px}
 
   <form class="composer" id="composer" hidden>
     <div class="composer-inner">
+      <div class="rag-filters" id="chat-filters"></div>
       <div class="input-wrap">
         <button class="icon-button" type="button"
           data-go="voice" id="composer-mic">
@@ -5098,15 +5116,119 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  const filterOptions = [
+    ['area','', 'Semua kawasan', 'All areas'],
+    ['area','Nongsa','Nongsa','Nongsa'],
+    ['area','Barelang','Barelang','Barelang'],
+    ['area','Nagoya','Nagoya','Nagoya'],
+    ['area','Sekupang','Sekupang','Sekupang'],
+    ['category','', 'Semua kategori', 'All categories'],
+    ['category','Pantai','Pantai','Beach'],
+    ['category','Kuliner','Kuliner','Food'],
+    ['category','Transportasi','Feri','Ferry']
+  ];
+  const chatFilters = {area:'',category:''};
+  const uiLabel = (language,id,en) => String(language).toLowerCase()==='en' ? en : id;
+  const filterLanguage = $("chat-filters");
+  function refreshChatFilters() {
+    filterLanguage.setAttribute('aria-label',uiLabel(lang,'Filter wisata','Travel filters'));
+    for(const button of filterLanguage.querySelectorAll('button')){
+      const [key,value,id,en]=filterOptions[Number(button.dataset.filterIndex)];
+      button.textContent=uiLabel(lang,id,en);
+      button.setAttribute('aria-pressed',String(chatFilters[key]===value));
+    }
+    for(const group of filterLanguage.querySelectorAll('[role="group"]')){
+      group.setAttribute('aria-label',group.dataset.filterGroup==='area' ? uiLabel(lang,'Kawasan','Area') : uiLabel(lang,'Kategori','Category'));
+    }
+  }
+  for(const type of ['area','category']){
+    const group=node('div','rag-filter-group');
+    group.dataset.filterGroup=type;
+    group.setAttribute('role','group');
+    filterOptions.forEach(([key,value],index)=>{
+      if(type!==key)return;
+      const button=node('button','rag-chip');
+      button.type='button';
+      button.dataset.filterIndex=String(index);
+      button.addEventListener('click',()=>{
+        chatFilters[key]=chatFilters[key]===value?'':value;
+        refreshChatFilters();
+      });
+      group.append(button);
+    });
+    filterLanguage.append(group);
+  }
+  refreshChatFilters();
+  new MutationObserver(refreshChatFilters).observe(document.documentElement,{attributes:true,attributeFilter:['lang']});
+
+  function addRagEvidence(bubble,data,language) {
+    const citations=Array.isArray(data.citations)?data.citations.slice(0,8).filter(c=>
+      c!=null&&Number.isInteger(c.index)&&c.index>=1&&typeof c.chunk_snippet==='string'&&c.chunk_snippet.trim()):[];
+    const ms=data.telemetry?.total_ms;
+    if(Number.isFinite(ms)&&ms>=0){
+      const duration=ms>=1000?(ms/1000).toFixed(1)+' s':Math.round(ms)+' ms';
+      const mode=data.telemetry.cache_hit?uiLabel(language,'⚡ Cache','⚡ Cached'):uiLabel(language,'Berdasarkan sumber','Grounded');
+      if(data.telemetry.cache_hit||citations.length)bubble.append(node('small','rag-speed',mode+' · '+duration));
+    }
+    if(typeof data.evidence_gap==='string'&&data.evidence_gap.trim()){
+      const notice=node('aside','rag-gap');
+      notice.setAttribute('aria-label',uiLabel(language,'Batas bukti','Evidence gap'));
+      notice.append(node('strong','',uiLabel(language,'Batas bukti','Evidence gap')),node('p','',data.evidence_gap));
+      bubble.append(notice);
+    }
+    if(citations.length){
+      const wrap=node('div','rag-evidence');
+      wrap.append(node('small','',uiLabel(language,'Bukti sumber','Source evidence')));
+      for(const citation of citations){
+        const detail=node('details','rag-drawer');
+        const heading=node('summary','rag-chip','['+citation.index+'] '+String(citation.source_name||uiLabel(language,'Sumber','Source')));
+        const text=node('blockquote','rag-snippet',citation.chunk_snippet);
+        detail.append(heading,text);
+        if(Number.isFinite(citation.match_score)&&citation.match_score>=0&&citation.match_score<=100){
+          const label=citation.score_kind==='exact'?uiLabel(language,'Kecocokan lokasi','Place match')
+            :citation.score_kind==='hybrid'?uiLabel(language,'Relevansi hybrid','Hybrid relevance')
+            :uiLabel(language,'Relevansi kata kunci','Lexical relevance');
+          detail.append(node('small','rag-match',label+' · '+citation.match_score+'%'));
+        }
+        const href=safeURL(citation.source_url);
+        if(href&&href.startsWith('https:')){
+          const link=node('a','source',uiLabel(language,'Buka sumber asli ↗','Open original source ↗'));
+          link.href=href;
+          link.target='_blank';
+          link.rel='noopener noreferrer';
+          detail.append(link);
+        }
+        wrap.append(detail);
+      }
+      bubble.append(wrap);
+      const exposed=new Set(citations.map(c=>c.source_url));
+      if(Array.isArray(data.sources))addSources(bubble,data.sources.filter(s=>!exposed.has(typeof s==='string'?s:s?.url)),language);
+    }else addSources(bubble,data.sources,language);
+    if(Array.isArray(data.followup_chips)){
+      const group=node('div','rag-followups');
+      group.setAttribute('role','group');
+      group.setAttribute('aria-label',uiLabel(language,'Pertanyaan lanjutan','Follow-up questions'));
+      for(const question of data.followup_chips.slice(0,2)){
+        if(typeof question!=='string'||!question.trim()||question.length>220)continue;
+        const button=node('button','rag-chip',question);
+        button.type='button';
+        button.addEventListener('click',()=>submit(question));
+        group.append(button);
+      }
+      if(group.children.length)bubble.append(group);
+    }
+  }
+
   function showAnswer(data,requestLanguage) {
     const {wrapper,bubble} = addMessage(
       "assistant",undefined,requestLanguage
     );
 
     const answer = node("div","answer");
+    const answerText = typeof data.answer === "string" && data.answer.trim() ? data.answer : data.response;
 
     if (window.marked && window.DOMPurify) {
-      answer.innerHTML = DOMPurify.sanitize(marked.parse(data.response), {
+      answer.innerHTML = DOMPurify.sanitize(marked.parse(answerText), {
         USE_PROFILES:{html:true},
         FORBID_TAGS:[
           "img","video","audio","iframe","form","input","button","style"
@@ -5125,7 +5247,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
     } else {
-      answer.textContent = data.response;
+      answer.textContent = answerText;
       answer.style.whiteSpace = "pre-wrap";
     }
 
@@ -5134,7 +5256,7 @@ document.addEventListener("DOMContentLoaded", () => {
     bubble.append(answer);
     replyPhotoContexts.set(bubble,{reply:data.response,language:requestLanguage});
     renderReplyPhotos(bubble,data.response,requestLanguage);
-    addSources(bubble,data.sources,requestLanguage);
+    addRagEvidence(bubble,data,requestLanguage);
 
     const controls = node("div","message-tools");
     const button = node("button","",t("listen"));
@@ -5213,7 +5335,9 @@ document.addEventListener("DOMContentLoaded", () => {
     return {
       message:text + context,
       language:language.toLowerCase(),
-      session_id:sessionId
+      session_id:sessionId,
+      ...(chatFilters.area && {area:chatFilters.area}),
+      ...(chatFilters.category && {category:chatFilters.category})
     };
   }
 
